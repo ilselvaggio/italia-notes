@@ -1,0 +1,39 @@
+name: Daily Italy OSM Notes Update
+
+on:
+  schedule:
+    # 01:17 UTC ogni giorno
+    - cron: '17 1 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: notes-update
+  cancel-in-progress: false
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Abhängigkeiten installieren
+        run: pip install requests shapely
+
+      - name: Update-Skript ausführen
+        run: python update.py
+
+      - name: Änderungen committen und pushen
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Automatisches Update: OSM Notes"
+          file_pattern: "data/*.geojson metadata.json history.json"
