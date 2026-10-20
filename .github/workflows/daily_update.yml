@@ -29,6 +29,14 @@ jobs:
       - name: Abhängigkeiten installieren
         run: pip install requests shapely
 
+      - name: Confine nazionale scaricare (solo la prima volta)
+        run: |
+          if [ ! -s italy_boundary.geojson ]; then
+            curl -sSf "https://polygons.openstreetmap.fr/index.py?id=365331" > /dev/null || true
+            curl -sSf "https://polygons.openstreetmap.fr/get_geojson.py?id=365331&params=0" -o italy_boundary.geojson
+            python -c "import json; g=json.load(open('italy_boundary.geojson')); print('Italia:', g.get('type'))"
+          fi
+
       - name: Update-Skript ausführen
         run: python update.py
 
@@ -36,4 +44,4 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Automatisches Update: OSM Notes"
-          file_pattern: "data/*.geojson metadata.json history.json"
+          file_pattern: "data/*.geojson metadata.json history.json italy_boundary.geojson"

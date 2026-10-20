@@ -14,13 +14,16 @@ import datetime
 import requests
 from shapely.geometry import shape, Point, box
 from shapely.strtree import STRtree
+from shapely.prepared import prep
+from shapely.ops import unary_union
 
 API = "https://api.openstreetmap.org/api/0.6/notes.json"
 HEADERS = {"User-Agent": "ItaliaNotesBot/1.0 (https://github.com/ilselvaggio/italia-notes)"}
 CLOSED_DAYS = 30          # note chiuse negli ultimi N giorni incluse
 LIMIT = 10000             # massimo consentito dall'API
 CELL = 1.0                # lato cella in gradi (API: max 25 gradi²)
-NEAREST_MAX = 0.03        # note in mare vicino alla costa: assegna alla regione più vicina (~3 km)
+NEAREST_MAX = 0.05        # note in mare: assegna alla regione più vicina (~5 km), solo se dentro i confini nazionali
+ITALY_FILE = "italy_boundary.geojson"  # confine nazionale (admin_level=2, con acque territoriali)
 COMMENT_MAX = 500
 
 REGIONS_FILE = "regions.json"
@@ -96,6 +99,15 @@ def main():
         warn(f"Regioni senza confine: {', '.join(sorted(missing))}")
     tree = STRtree(geoms)
 
+    italy = None
+    if os.path.exists(ITALY_FILE):
+        with open(ITALY_FILE, encoding="utf-8") as f:
+            gj = json.load(f)
+        feats = gj.get("features", [gj]) if gj.get("type") != "MultiPolygon" else [{"geometry": gj}]
+        italy = prep(unary_union([shape(f.get("geometry", f)).buffer(0) for f in feats]))
+    else:
+        warn(f"{ITALY_FILE} mancante: note fuori dai confini regionali (es. in mare) vengono scartate")
+
     # griglia di celle che toccano l'Italia
     minx = min(g.bounds[0] for g in geoms); miny = min(g.bounds[1] for g in geoms)
     maxx = max(g.bounds[2] for g in geoms); maxy = max(g.bounds[3] for g in geoms)
@@ -135,7 +147,7 @@ def main():
         for idx in tree.query(pt):
             if geoms[idx].contains(pt):
                 key = keys[idx]; break
-        if key is None:
+        if key is None and italy is not None and italy.contains(pt):
             idx = tree.nearest(pt)
             if geoms[idx].distance(pt) <= NEAREST_MAX:
                 key = keys[idx]
